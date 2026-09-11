@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Compte de l'assistante maternelle (administrateur de l'application)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+}
+
+// Un enfant gardé
+model Child {
+  id            String       @id @default(cuid())
+  firstName     String
+  lastName      String
+  birthDate     DateTime?
+  parentName    String
+  parentEmail   String?
+  parentPhone   String?
+  accessToken   String       @unique @default(cuid())
+  accessPin     String
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  contract      Contract?
+  attendances   Attendance[]
+  invoices      Invoice[]
+}
+
+// Contrat / conditions tarifaires de garde pour un enfant
+model Contract {
+  id                 String   @id @default(cuid())
+  child              Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  childId            String   @unique
+  billingMode        String   @default("HORAIRE") // "HORAIRE" | "MENSUALISE"
+  hourlyRate         Float    @default(0) // taux horaire net (EUR)
+  monthlyHours       Float? // heures mensualisees (si MENSUALISE)
+  monthlySalary      Float? // salaire mensuel fixe (si different de hourlyRate * monthlyHours)
+  mealRate           Float    @default(0) // indemnite repas par jour (EUR)
+  maintenanceRate    Float    @default(0) // indemnite d'entretien par jour (EUR)
+  maintenanceMonthly Float? // indemnite d'entretien mensuelle fixe (remplace le calcul journalier si renseignee)
+  weeklySchedule     String   @default("{}") // JSON: heures prevues par jour de semaine {mon:8,tue:8,...}
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Presence / absence / conge d'un enfant pour une journee donnee
+model Attendance {
+  id           String   @id @default(cuid())
+  child        Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  childId      String
+  date         DateTime // journee (minuit UTC)
+  status       String // PRESENT | ABSENT | CONGE | FERIE | MALADIE
+  hours        Float    @default(0)
+  mealProvided Boolean  @default(false)
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([childId, date])
+  @@index([childId, date])
+}
+
+// Facture mensuelle generee pour un enfant
+model Invoice {
+  id                String   @id @default(cuid())
+  child             Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  childId           String
+  year              Int
+  month             Int // 1-12
+  daysPresent       Int
+  hoursTotal        Float
+  gardeFee          Float
+  mealDays          Int
+  mealFee           Float
+  maintenanceDays   Int
+  maintenanceFee    Float
+  totalFee          Float
+  status            String   @default("BROUILLON") // BROUILLON | ENVOYEE | PAYEE
+  breakdown         String // JSON detaille du calcul pour affichage transparent
+  generatedAt       DateTime @default(now())
+
+  @@unique([childId, year, month])
+}
